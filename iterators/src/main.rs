@@ -239,7 +239,9 @@ mod tests {
         assert_eq!(flatten(flatten(vec![vec![vec![0, 1]]])).count(), 2)
     }
     #[test]
-    fn ext() {}
+    fn ext() {
+        
+    }
 }
 
 // if you decide to flatten eagerly , then you would have to allocate memory , so suppose you hae a scenario where you want to flatten an infinite iterator , then you would fisrt have to allocate an infinite amount of memory
