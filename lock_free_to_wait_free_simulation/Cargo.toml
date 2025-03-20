@@ -1,0 +1,6 @@
+[package]
+name = "lock_free_to_wait_free_simulation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
