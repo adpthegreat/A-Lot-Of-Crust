@@ -210,3 +210,30 @@ struct MutexGuard<'a, T> {
 }
 
 ```
+
+Obviously useful references :
+- https://doc.rust-lang.org/std/marker/trait.Sync.html
+- https://doc.rust-lang.org/std/marker/trait.Send.html 
+- https://doc.rust-lang.org/nomicon/send-and-sync.html 
+
+
+## Additional notes with timestamps i saw in a youtube comment, talks about `Cell` and stuff i omitted
+
+
+```rust
+@CPTSLEARNER
+10 months ago (edited)
+11:10 T does not have to be Clone in Rc<T>
+11:45 If &mut is omitted, the code would still work, as dereferencing a mutable raw pointer (self.inner: *mut Inner<T>) gives mutable access to Inner<T>
+13:10 &unsafe { &*self.inner }.value: &* dereferences the raw pointer and casts the Inner<T> to a shared reference, & casts the value to a shared reference
+25:30 MutexGuard is Sync + !Send, Rc is !Send (clone Rc and send to another thread, reference count is not atomic) + !Sync (send &Rc to another thread and call clone, requires all access happens on one thread)
+28:40 Cell is Send + !Sync, can't get reference to Cell in another thread, therefore safe to mutate in current thread as no other reference is mutating it. T must also implement Send + !Sync.
+31:00 Application of Cell in graph traversal (can't take exclusive references, could walk same node), Cell allows mutation through a shared reference
+36:20 If &mut T is Send, then T must be Send (std::mem::replace)
+45:00 T is Sync because all the Arc instances reference T, T is Send because the last Arc must drop the inner type
+46:00 &T is Send if T is Sync
+47:30? Sender is !Sync, multiple shared references to Sender but only one in each thread
+54:30 dyn syntax allows only one trait, exceptions are auto traits (Send, Sync)
+59:50 thread::spawn requires type is 'static & and Send, not Sync as it doesn't take references
+1:00:40 thread::scope does not need 'static & arguments, current thread can't return until scoped thread joined
+```
