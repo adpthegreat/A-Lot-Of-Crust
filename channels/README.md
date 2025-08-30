@@ -18,7 +18,7 @@ This is the type signature
 
 - Unless you specify that `T` is `?Sized` then `T` has to be Sized
 
-- the Sender thread is distinguished from the Reciver with types 
+- the Sender thread is distinguished from the Receiver with types 
 
 
 The channel Object owns the data in it, when you Send data and you don't receive it, the channel makes sure the data gets dropped
@@ -27,7 +27,7 @@ The channel Object owns the data in it, when you Send data and you don't receive
 
 - Lock method returns Guard and once you have that guard you are guaranteed to be the only thing that can access the `T` that is protected by the Mutex
 
-- Arc Atomically reference counting pointer
+- `Arc` Atomically reference counting pointer
 We want it to work across thread boundaries, one of the reasons `Mutex` is being used and not `RefCell`
 
 `Condvar` - conditional variable, you use to tell other threads that it has something it cares about that you can access 12.00
@@ -54,7 +54,7 @@ The low level differences between the mutex and the semaphore being
 
 - Boolean semaphore, boolean flag that can be atomically updated - if someone else is in the critical section that is if has the lock and is setting the flag, then you have to spin and comtinuously check if you can access it .
 
-- Also for the mutex the OS can make the thread sleep and wake it up when teh mutex is available, which is more efficent but has more latency 
+- Also for the mutex the OS can make the thread sleep and wake it up when the mutex is available, which is more efficent but has more latency 
 
 ## Why Arc ?
 
@@ -73,7 +73,7 @@ pub struct Receiver<T> {
 
 ```
 
-they made lockResult generic so its not a guard type in the result anymore, it has changed since the video;
+they made `LockResult` generic so its not a guard type in the result anymore, it has changed since the video;
 old
 
 ```rust
@@ -88,15 +88,15 @@ pub type LockResult<T> = Result<T, PoisonError<T>>;
 
 - We're using `Vec` like a stack, if the sender pushes twice and the receiver pops then it will get the last element and not the first element - which we obviously don't want , we want to get the data that the channels sends first.
 
-- We can solve this by removing the first element in the Vec, but the issue is when remove an element from the Vec then the other elements have to move their position to fill in the gap , that is it has to resize, so we are not going to use Vec for this, we would use VecDeque - the closest thing to ringBuffers in the rust `std::collections` 
+- We can solve this by removing the first element in the Vec, but the issue is when remove an element from the Vec then the other elements have to move their position to fill in the gap , that is it has to resize, so we are not going to use Vec for this, we would use `VecDeque` - the closest thing to ringBuffers in the rust `std::collections` 
 
 ## Using VecDeque
 
 - like a vector - both it keeps track of the start and end points 
 
-- You don't want to use swap_remove instead of pop-front in the receiver because that makes the last things sent become the first thing to be received, it changes the order of the elements - order matters
+- You don't want to use swap_remove instead of pop_front in the receiver because that makes the last things sent become the first thing to be received, it changes the order of the elements - order matters
 
-- pop_front returns an `Option<T>` because its possible for there not to be anything in the VecDeque, we can implement a `try_recv` method that uses this but we want a blocking version of recv, one that waits until there is something in the channel to implement the blocking recv we'll use a `CondVar`.
+- pop_front returns an `Option<T>` because its possible for there not to be anything in the VecDeque, we can implement a `try_recv` method that uses this but we want a blocking version of `recv`, one that waits until there is something in the channel to implement the blocking recv we'll use a `CondVar`.
 
 ## No Condvars inside the Mutex
 
@@ -272,13 +272,13 @@ drop(tx);
 ## Critiquing design decisions and potential improvements
 
 - `All operations take the lock` - in a high performance scenario,
-we would not want the Senders to content with one another, its only the sender and the reciever that the synchronization should occur between 
+we would not want the Senders to content with one another, its only the sender and the receiver that the synchronization should occur between 
 
 - `Synchronized or unsynchronized Senders`  - Looking at the std lib channel impl, we can see that we have to sender types `Sender` and `SyncSender` the difference between that is that `Sender` is async and `SyncSender` is sync , but not in the conventional async await way , what we mean is they are forced to synchronize, that is when one is faster than the other , in our current design the sender can send as many as they want to the receiver and the queues capacity increases, if its a sync sender way, thre is a limited capacity it can send at first, if it exceeds that then the Sender blocks
 
 - The primary difference is whether the `Sender` can block or not 
 
-- In the std lib sync_channel takes a bound of type `usize`
+- In the std lib `sync_channel` takes a bound of type `usize`
 
 ```rust 
 pub fn sync_channel(bound:usize) -> (SyncSender<T>, Receiver<T>)
@@ -336,8 +336,9 @@ impl<T> Receiver<T> {
     }
 }
 
+```
 So the process would be like 
-
+```md
 invoke recv 
 -> check if theres items in the buffer last time we took the lock 
     -> if yes then take the first item (pop_front) 
@@ -354,7 +355,7 @@ invoke recv
 
 - Removing the if condition for the swap does not necessarily make it faster, CPU already has branch Prediction so it can speculatively execute
 
-- No need to return a list - fi we return a list we would have to allocated the list everytime 
+- No need to return a list - if we return a list we would have to allocated the list everytime 
 
 
 ## Flavors 
@@ -407,3 +408,6 @@ Chapter 5 or mara bos' Rust atomics and locks
 https://marabos.nl/atomics/ 
 
 https://en.wikipedia.org/wiki/Circular_buffer
+
+### Study lock free algos 
+https://en.wikipedia.org/wiki/Non-blocking_algorithm

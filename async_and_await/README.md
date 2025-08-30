@@ -3,7 +3,7 @@
 Take a look at this code 
 
 ```rust 
-async fn foo() -. usize {
+async fn foo() -> usize {
     0
 }
 ```
@@ -15,11 +15,11 @@ fn foo2() -> impl Future<Output = usize> {
 ```
 
 
-a value thats not ready yet but will eventually be a usize , its a promise that i will give you a usize 
+A value thats not ready yet but will eventually be a usize , its a promise that i will give you a usize 
 
- dont run the following instructions until it reolves into its output type
+ Don't run the following instructions until it reolves into its output type
 
-A Future does nothing until it is awaited 
+`A Future does nothing until it is awaited `
 
 This code will not print anything because it is not awaited 
 
@@ -33,11 +33,11 @@ fn main () {
 }
 ```
 
-Think of futures as exectuing in chunks , while its not ready it lets other things run , it runs untile it cant make progress anymore, then it yields 
+Think of futures as exectuing in chunks , while its not ready it lets other things run , it runs until it can't make progress anymore, then it yields. 
 
-Look at this , here we have one threaad for handling terminal reads and one thread for ahndlingc connections, but it gets worse if we have one thread for every operation we have to do 
+Look at this , here we have one thread for handling terminal reads and one thread for a handling connections, but it gets worse if we have one thread for every operation we have to do.
 
-if one connection is full you ahve to be able to write to the other 
+If one connection is full you have to be able to write to the other.
 
 
 ```rust 
@@ -61,20 +61,19 @@ let read_from_network = std::thread::spawn(move|| {
 ## select! macro
 (was getting tired in this section lol, slept off too)
 
-- waits on multiple futures and tells you which one finishes first , yiled until something happens 
+- Waits on multiple futures and tells you which one finishes first, yield until something happens 
 
-- uses the idea of cooperative scheduling - if i don;t run i let whoever is above me decide who runs next , nad it might no tbe me 
+- Uses the idea of cooperative scheduling - if i don't run i let whoever is above me decide who runs next, and it might not be me 
 
-- cancellation tokens to cancel any future 
+- Cancellation tokens to cancel any future 
 
-- another name proposed for select! was race!
+- Another name proposed for `select!` was `race!`
 
-- the way cancellation works is that you describe the circumstances under which you cancel the operation 
+- The way cancellation works is that you describe the circumstances under which you cancel the operation 
 
-- you program can be in an intermediate state it only affects selects, this is an error case you should no 
+- Your program can be in an intermediate state it only affects selects, this is an error case you should no 
 
-
-- fuse means its safe to await this future een though the future has completed in the past 
+- Fuse means its safe to await this future een though the future has completed in the past 
 
 - `select!` keeps a bitmask for all available branches of execution and when it receives 
 
@@ -110,7 +109,7 @@ fn foo2(cancel:tokio::sync::mpsc::Receiver<()>) -> impl Future<Output = usize> {
 
 ```
 
-- if you're in an async context and you need to run something that you know might block for a long time , you can use `tokio::task::spawn_blocking` , i'm about to block allow other tasks to run too
+- If you're in an async context and you need to run something that you know might block for a long time , you can use `tokio::task::spawn_blocking` , i'm about to block allow other tasks to run too
 
 ```rust
 tokio::task::spawn_blocking(async move ||{
@@ -137,29 +136,29 @@ let file3 = files[2].await;
 let (file, file2, file3) = join!(files[0], files[1], files[2]);
 ```
 
-- only good if you have  afew things, you don;t want a tuple with 100 items lol 
+- Only good if you have a few things, you don't want a tuple with 100 items lol 
 
-- joinall and tryjoinall uses futures under the hood, join and select allows things to run concurrently, but they don;t allow them to run in parallel
+- `joinall` and `tryjoinall` uses futures under the hood, `join` and `select` allows things to run concurrently, but they don;t allow them to run in parallel
 
-- what does things is that you give it a future and it moves that future to the executor , Note that this is NOT a thread::spawn 
+- what does things is that you give it a future and it moves that future to the executor, Note that this is NOT a `thread::spawn`
 
-- requires that you futre you pass in is Send + static so ti can be sent to other threads and because it does not know the lifetime of the runtime
+- requires that you future you pass in is `Send + static` so it can be sent to other threads and because it does not know the lifetime of the runtime.
 
-- you need to communciate the futures that need to run in parallel to the executor 
+- You need to communciate the futures that need to run in parallel to the executor 
 
-- sometimes when people start using async await and they see that the performamnce drops its because they're not spawning anything and it runs on one thread, i mean ,of course, nothing gets to run in parallel 
+- Sometimes when people start using async await and they see that the performamnce drops its because they're not spawning anything and it runs on one thread, i mean ,of course, nothing gets to run in parallel 
 
-- spawn whill stick the future into the executor and keep a pointer to that future 
+- Spawn will stick the future into the executor and keep a pointer to that future 
 
-- futures assigned on the stack need to bre pinned so they cannot be moved
+- Futures assigned on the stack need to bre pinned so they cannot be moved
 
-- once you;ve started awaiting a future you can;t move it unless its unpinned 
+- Once you've started awaiting a future you can't move it unless its unpinned 
 
 ## async trait 
 
 (i'm awake now)
 
-we cant use async fns in traits, we don't know what the size 
+We cant use async fns in traits, we don't know what the size 
 
 ``` rust 
 struct Request;
@@ -198,9 +197,9 @@ fn foo(x: &mut dyn Service) {
 
 ```
 
-there really isnt a "good" ay to dela with asyn fn calls so far 
+There really isnt a "good" day to deal with async fn calls so far 
 
-the type of the thing it produces isnt knwon anywhere
+The type of the thing it produces isn't knwon anywhere
 
 we can fix this by using `#[async_trait]` attribute macro, async_trait rewrites the methods in the trait and implementation from 
 
@@ -314,9 +313,9 @@ impl Service for X {
 fn main() {}
 ```
 
-Now, if i take the expanded form in the Service traitsand place it in my code base and compile, it won't complain because it now has a well known size as it is a Heap allocated dynamically dispatched future (wow thats a mouthful)
+Now, if i take the expanded form in the Service traits and place it in my code base and compile, it won't complain because it now has a well known size as it is a Heap allocated dynamically dispatched future (wow thats a mouthful)
 
-The problem is you're now allocating all your futures in the heap, nw imagine if you do a read , lets reanme our service trait to AsyncRead, now, everytie we do a read we are doing a heap allocation and extra pointer indirection, it might no well if you have to use it at the bottom of your stack, its beter for higher level stuff
+The problem is you're now allocating all your futures in the heap, now imagine if you do a read, lets rename our service trait to `AsyncRead`, now, everytime we do a read we are doing a heap allocation and extra pointer indirection, it might no well if you have to use it at the bottom of your stack, its better for higher level stuff
 
 ```rust 
     trait AsyncRead {
@@ -364,15 +363,15 @@ async fn main() {
 }
 ```
 
-Suppose we are in a situation we execute x1, it locks and reads the string, the lock is still held by x1, now when x2 tries to enter its own branch of execution and acquire the lock, it can't because its still held by x1 so it just blocks the whole thread , it knows nothing about asynchrony, that means the executors thread is blocked, then it never continues reading the string, then the first future never drops its lock on, so the lock is never released and the lock on l2 never completes and we effectively have a deadlock, this is why they avoid
+Suppose we are in a situation we execute `x1`, it locks and reads the string, the lock is still held by `x1`, now when `x2` tries to enter its own branch of execution and acquire the lock, it can't because its still held by `x1` so it just blocks the whole thread , it knows nothing about asynchrony, that means the executors thread is blocked, then it never continues reading the string, then the first future never drops its lock on, so the lock is never released and the lock on l2 never completes and we effectively have a deadlock, this is why they avoid
 
-Now the differnce is that  in async aware locks, when it fails to take the lock it will yield rather that blocking the thread (VERY IMPORTANT)
+Now the difference is that in async aware locks, when it fails to take the lock it will yield rather that blocking the thread (VERY IMPORTANT)
 
 This is why we need async aware mutexes - but the downside is that they are slower (theres more heavy lifting behind the scenes)
 
 In general we want to use `std::sync::mutex` standard library mutexes as long as your critical section (part in a concurrent program where we access a shared resource) is short and does not have any .awaits (unlike our `read_to_string`)
 
-So if we didn't have our `read_to_string` method call and we just increment or decemrenting the number , then the std mutex is ok 
+So if we didn't have our `read_to_string` method call and we just increment or decemrenting the number, then the `std mutex` is ok 
 
 ```rust
 async fn main() {
@@ -403,7 +402,7 @@ num += 1 // don't think about where the num comes from :-)
 
 would be clearer, maybe its because i'm still thinking of the java syntax (i did java lolll)
 
-Okay just checked the docs the even though we initialize the `Mutex` with a 0 , we first access the lock, unwrap the avlue and modify it, so we have something like this 
+Okay just checked the docs the even though we initialize the `Mutex` with a 0 , we first access the lock, unwrap the value and modify it, so we have something like this 
 
 
 ```rust
@@ -419,17 +418,17 @@ async fn main() {
 }
 ```
 
-## Difference between tokio::spawn 
+## Difference between tokio::spawn and thread::spawn
 
-- `tokio::spawn` gives the future it has passed to the executor, for the executor to run concurrently with other futures 
+- `tokio::spawn` gives the future it has passed to the executor, for the executor to run concurrently with other futures.
 
-- A thread::spawn spawns and OS thread that will run in parallel with everthing in your program - its also does not take a future it takes a closure , if you wanted to await a future in a `thread::spawn` you would have to create your own executor 
+- A `thread::spawn` spawns an OS thread that will run in parallel with everything in your program - its also does not take a future it takes a closure , if you wanted to await a future in a `thread::spawn` you would have to create your own executor.
 
-- If you use `tokio::spawn` you have to have yield points so that you would not block the executor and let the other futures run 
+- If you use `tokio::spawn` you have to have yield points so that you would not block the executor and let the other futures run .
 
-- In `thread::spawn` thats not a problem because the OS can preemptively interrupt you , they are not cooperatively scheduled 
+- In `thread::spawn` thats not a problem because the OS can preemptively interrupt you, they are not cooperatively scheduled 
 
-- when a future fields , it yields to whatever awaited it
+- When a future fields, it yields to whatever awaited it.
 
 
 ## The what, how and why of async await 
@@ -470,7 +469,6 @@ spawn tells the executor just run this thing and make sure it gets run at some p
 
 
 what does the executor do ?? we're about to find out 
-
 
 Okay so this video was made 6 years ago and the trait definition of futures have changed since then
 

@@ -73,4 +73,4 @@ fn main() {
 }
 
 // Race condition
-// they both end up seeing 1 and dropping it leading to underfined behaviour 
+// they both end up seeing 1 and dropping it leading to undefined behaviour 

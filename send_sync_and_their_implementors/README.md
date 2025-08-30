@@ -1,24 +1,25 @@
 
 # What is Send + Sync ?
 
-- used to represent thread safety at the type level
+- Used to represent thread safety at the type level
 
 - They are both marker traits <https://doc.rust-lang.org/std/marker/index.html> marker traits have no methods they are used to signify if a type meets or has a given property
 
 - auto traits - the compiler automatically impls the traits for you
 
-- all auto traits are marker traits but not all marker traits are auto traits
+- All auto traits are marker traits but not all marker traits are auto traits
 
-- primarily used in trait bounds
+- Primarily used in trait bounds
 
 ## Send
 
-its ok to pass this value to another thread , give up ownership to another thread - it can do whatever it wants , most types in general are Send eg a primitive like a number , boolean or string
+Its ok to pass this value to another thread, give up ownership to another thread - it can do whatever it wants, most types in general are `Send` eg a primitive like a number, boolean or string
 
 ### Types that are not Send
 
-- if it might violate some implicit assumptions or invariants that the type has eg `Rc` the atomically reference counted pointer,  
-- `MutexGuard` theres a requirement on OSs that the thread that gets the lock is the same thread that releases the lock (so it can't be `Send` obviously ) so its the guard not the mutex itself thats not `Send`, same thread that acquires the lock is the same thread that releases the lock
+- if it might violate some implicit assumptions or invariants that the type has eg `Rc` the atomically reference counted pointer.
+
+- `MutexGuard` there's a requirement on OSs that the thread that gets the lock is the same thread that releases the lock (so it can't be `Send` obviously ) so its the guard not the mutex itself thats not `Send`, same thread that acquires the lock is the same thread that releases the lock
 
 - Check out the impl of `Mutex<T>` in tokio and the constraints on when its Send or not https://github.com/tokio-rs/tokio/blob/master/tokio/src/sync/mutex.rs#L255 
 
@@ -61,7 +62,7 @@ Here we have the foo method , its type signature constrains its parameter to be 
     }
 ```
 
-it appears within Rc and the traits is not implemented , we get an error
+it appears within Rc and the traits is not implemented, we get an error
 
 ```rust
 error[E0277]: `*mut Inner<()>` cannot be sent between threads safely
@@ -149,13 +150,13 @@ note :
 - &mut T - mutable reference
 - Sync is almost defined in terms of `Send`
 
-- if you have a type, where a reference to that type is allowed to be sent between threads then it is `Sync`, even if the type itself cannot be passed to some other thread. According to the documentation, "a type `T` is `Sync`, if and only if `&T` is `Send`"
+- If you have a type, where a reference to that type is allowed to be sent between threads then it is `Sync`, even if the type itself cannot be passed to some other thread. According to the documentation, "a type `T` is `Sync`, if and only if `&T` is `Send`"
 
 - This is the reason Rc is not `Sync` too, because if it was `Sync` we can take a reference of `Rc` send it to another thread, clone it and do what we want with it, but this should not be, as the clone underlying impl requires that access happens on one thread
 
-- But a MutexGuard is not Send but it is Sync , - they can't drop it, its behind a shared reference, they don't get any type of owned access, all they can do is read from it <https://github.com/tokio-rs/tokio/blob/master/tokio/src/sync/rwlock.rs#L146>
+- But a `MutexGuard` is not Send but it is Sync, - they can't drop it, its behind a shared reference, they don't get any type of owned access, all they can do is read from it <https://github.com/tokio-rs/tokio/blob/master/tokio/src/sync/rwlock.rs#L146>
 
-- AtomicPtr is just a raw pointer that impls Send
+- `AtomicPtr` is just a raw pointer that impls Send
 
 - if you create a sender receiver channel, whre you move types not between threads, theres not requirement that the types are Send and Sync
 
@@ -169,7 +170,7 @@ impl<T> Sender<T>
 pub fn send(&self, t: T) -> Result<(), SendError<T>>
 ```
 
-- futures are Send and Sync for the prupose of multithreadded execution , you should see something like this
+- Futures are Send and Sync for the prupose of multithreadded execution, you should see something like this
 
 ```rust
 fn (_: Box<dyn std::future::Future<Output = ()> + Send>) {} 
@@ -200,7 +201,7 @@ error[E0658]: negative trait bounds are not yet fully implemented; use marker ty
    = note: see issue #68318 <https://github.com/rust-lang/rust/issues/68318> for more information
 ```
 
-It tells us to use marker types, and what we can use is `PhantomData` we're not actually storing an Rc, just pretend the type is there, so since, but more importantly it propagates its type, so because Rc is not Send and Sync , our MutexGuard will also be not Send and not Sync, heres the new code
+It tells us to use marker types, and what we can use is `PhantomData` we're not actually storing an Rc, just pretend the type is there, so since, but more importantly it propagates its type, so because Rc is not Send and Sync, our MutexGuard will also be not Send and not Sync, heres the new code
 
 ```rust
 
