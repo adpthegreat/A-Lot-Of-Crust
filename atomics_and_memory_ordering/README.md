@@ -537,7 +537,7 @@ Relaxed is too weak, we have to use another type of Ordering the next ones after
 
 ## Ordering::Release 
 
-If we do the store with release, any load of the same value thta uses the ACQUIRE Ordering, must see all operations that happened before the store as having happened before the store, no reads or writes in the current thread can be reordered after this store
+If we do the store with release, any load of the same value that uses the ACQUIRE Ordering, must see all operations that happened before the store as having happened before the store, no reads or writes in the current thread can be reordered after this store
 
 The rust docs says "When Ordering::Release gets coupled with a store, all previous operations become ordered before any load of this value with Acquire (or Stronger) Ordering"
 
@@ -546,7 +546,7 @@ The rust docs says "When Ordering::Release gets coupled with a store, all previo
         while self.locked.compare_exchange_weak(
             UNLOCKED, 
             LOCKED, 
-            Ordering::Relaxed, 
+            Ordering::Acquire,
             Ordering::Relaxed
         ).is_err() {
             while self.locked.load(Ordering::Relaxed) == LOCKED {
@@ -585,9 +585,191 @@ Acquire-Release establish a relationship between what happens before what , that
 
 Its kinda like an invariant that says "anything that happened before the operation that did the store, happened after the operation the did the load"
 
+## Ordering::AcqRel
+When we pass it into an operation that has a read and a write it says "Do the load with acquire semantics and do the store with release semantics"
+
+AcqRel is mostly used when you are doing a single modification operation , like fetch_add, theres no critical section that we want to be synchronized with other threads 
+
+```rust
+    fn with_lock<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
+        while self.locked.compare_exchange_weak(
+            UNLOCKED, 
+            LOCKED, 
+            Ordering::AcqRel,
+            Ordering::Relaxed
+        ).is_err() {
+     /// rest of the code 
+    }
+}
+```
+
+Here in our code we changed the Ordering to AcqRel to show its usage, but we don't actually need it here , we have store operations and a criitical section, Acquire and Release semantics are okay 
+
+### What is the second Ordering:: argument in the compare_exchange_weak for?
+- What ordering should the load have if the load indicates that you shouldn't store 
+
+- what is the ordering if you fail to take the lock? We can leave it as Ordering::relaxed , if we fail to take the lock we dont have to do some exclusive access or coordination among threads 
+
+### Why 
+Intel x86 guarantees acquire release semantics for all operations (so the ordering::relaxed doesnt matter or gets overridden??) yeah basically , its baked into the CPU architecture itself 
+
+Architectures like ARM do not guarantee that, it will give you relaxed ordering semantics if asked and this show the trickiness of testing concurrent code and its gotchas 
+
+use relaxed when instruction order doesnt matter for all the threads eg a generic counter across threads 
+
+## Fetch Operations 
+https://doc.rust-lang.org/std/sync/atomic/struct.AtomicUsize.html#method.fetch_add
+
+We tell the CPU how to compute the new value (with Ordering) instead of telling it what it will be, these operations are called fetch_add or fetch_sub because it tells you what the value was when it incremented (or decremented it) 
+
+We cant actually use an atomic add and load to mimic this behaviour which shows the usefulness of fetch operatiosn because in between the atomic operation ( eg add ) and loading the value another thread might modify the value, so we can never have a guarantee that that wouldnt happen
+
+Its a single atomic operation 
+
+fetch_update is an interesting opreation -> it takes in a closure , that given the current value, it should return the new value 
+
+You can see the type signature of F yeah? 
+
+```rust 
+pub fn fetch_update<F>(
+    &self,
+    set_order: Ordering,
+    fetch_order: Ordering,
+    f: F,
+) -> Result<usize, usize>
+where
+    F: FnMut(usize) -> Option<usize>,
+```
+
+So now think of fetch_add as a fetch_update that takes in a closure that increments the value by 1 
+
+What makes fetch update reallly weird is that for the other fetch operations they are natively implemented in the CPU , but fetch_update is really just a compare_exchange loop 
+
+sauce https://doc.rust-lang.org/src/core/sync/atomic.rs.html#2017 
+
+```rust 
+    pub fn fetch_update<F>(
+        &self,
+        set_order: Ordering,
+        fetch_order: Ordering,
+        mut f: F,
+    ) -> Result<*mut T, *mut T>
+    where
+        F: FnMut(*mut T) -> Option<*mut T>,
+    {
+        let mut prev = self.load(fetch_order);
+        while let Some(next) = f(prev) {
+            match self.compare_exchange_weak(prev, next, set_order, fetch_order) {
+                x @ Ok(_) => return x,
+                Err(next_prev) => prev = next_prev,
+            }
+        }
+        Err(prev)
+    }
+```
+
+Also notice that they correctly use compare_exchange_weak as its in a loop , so thats the main difference fetch_update and fetch_add , first is a CE loop , second is a single atomic CPU instruction 
+
+Now going back to the [Portability](https://doc.rust-lang.org/std/sync/atomic/#portability) section under the rust atomic page, it says  
+
+```md 
+Atomic types and operations are not guaranteed to be wait-free. This means that operations like fetch_or may be implemented with a compare-and-swap loop
+```
+
+If fetch_add doesn't exist on your arch it'll just be impl with a compare_and_exchange loop 
+
+## If some things are impl under the hood with compare_exchange then why doesnt they all return a Result 
+- Fetch methods eg fetch_add ALWAYS succeeds 
+
+## Sequentially Consistent Ordering SeqCst 
+
+1.40.0 -> 
+
+But but why? why did the programmers and designers even come up withmemory ordering, the re arranging of concurrent operations and all? 
+
+Its actually okay in a mutex and it causes no problems 
+
+Everything in rust by default has an ordering, now for the others (Semantics) if you want stronger guarantees you have to opt into them 
+
+How does seq consistent ordering change this 
+
+## SeqCst 
+Like Acq Rel with the additional guarantee that all threads see all sequentially consistent operations in the same order 
+```md
+    What are the possible values for z ? 
+    is 0 possible? if we make is SeqCst , 0 is not possible 
+    Restrictions: 
+    we know that t1 must run "after" tx
+    we know that t2 must run "after" ty
+    Given that..
+    .. tx .. t1 ..
+        ty t2 tx t1 -> t1 will incr z
+        ty tx ty t2 t1 -> t1 will incr z
+    .. tx .. t1 .. t1 ty t2 -> t2 will incr z
+    Seems impossible to have a thread schedule where z == 0 
+
+            t2    t1
+                   v
+    M0(x): false true
+    
+            t1
+    M0(y): false true
+    - Is 1 possible?
+    Yes: tx, t1, ty, t2
+    - Is 2 possible?
+    Yes: tx, ty, t1, t2
+```
+
+Because we have set the Ordering to SeqCst in _tx, _ty t1 and t2 , after x and y have been set to true in 
+_tx and _ty , no thread in t1 and t2 is allowed to observe x and y ever being false , a happens before relationship has already been established
+SeqCst operations are only in relation to other operations with Ordering::SeqCst, that is sequentially consistent ordering 
+SeqCst has the strongest ordering 
+SeqCst is AcquireRelease with the stronger guarantee that all SeqCst operations must be seen as happening in the same order on all threads 
+
+## Testing 
+-Hard for the human brain to model these things , code can fail to do what it does without panicking
+
+ThreadSanitizerAlgorithm - every load , store and atomic ix gets special ixs added to them they get tracked and when 
+two threads that writes to the same mem location 
+two threads that write before or after one and theres no "happens before" relationship (Ordering) between them
+
+https://github.com/google/sanitizers/wiki/threadsanitizeralgorithm 
+
+For rust theres [loom](https://github.com/tokio-rs/loom), which implements a paper called [CDSChecker](http://demsky.eecs.uci.edu/publications/c11modelcheck.pdf)
+
+Loom works by taking a concurrent program, instrumented it, giving it its own loom types for the Atomics, Ordering, eg `loom::sync::Atomic` `loom::sync::atomic::Ordering`
+
+Keeps track of all the values that have stores, every execution 
+
+All possible thread interleavings and memory orderings 
+
+Running your loom tests -> use loom primitives 
+
+`loom::model` is what runs the different permutations of possibilities , and in it you pass in the closure you want to test 
 
 
+## SeqCst example is not really solid
+Notice some papers that they impl Concurrent Data Structures and look at where they used memory ordering 
 
+The name loom makes sense it spins threads in may ways -> commmenter 
+
+You cant fully model something like `Ordering::Relaxed` even with loom too realxed , too many possibilities
+
+It models `Acquire-Release` correctly still
+
+
+compiler fence compiler is not allowed to move things above or below the fence , its mostly used for preventing threads from racing with themselves that mostly happens when you are using signal handlers 
+
+Establishes a happen before relationship between two threads without talking about a memory location 
+
+AtomicPtr specialized typee of Atomic Usize that operates on pointers and keeps pointer properties 
+
+DONT WRITE LOCK FREE CODE UNLESS YOU REALLY HAVE TO! YOU CAN JUST USE A MUTEX 
+
+Now, if you somehow need to use lock free programming ,
+Use Loom, use Thread Sanitizer , use Miri  find a paper that implements the algorithm you are trying to implement, and follow it , ask others to Vet it for you, just make sureee you get it right 
+
+AGAIN, DONT WRITE LOCK FREE CODE UNLESS YOU REALLY HAVE TO! YOU CAN JUST USE A MUTEX 
 
 ## Further reading 
 https://en.cppreference.com/w/cpp/atomic/memory_order.html --> MOST IMPORTANT READ
@@ -598,6 +780,8 @@ https://www.cs.utexas.edu/~pingali/CS377P/2018sp/lectures/mesi.pdf
 https://doc.rust-lang.org/std/sync/atomic/struct.AtomicUsize.html#method.compare_exchange 
 https://www.reddit.com/r/rust/comments/1kx024i/disappointment_of_the_day_compare_exchange_weak/
 https://en.wikipedia.org/wiki/ABA_problem
+https://medium.com/@levinet.nicolai/exclusive-monitors-ldrex-strex-ensuring-atomicity-456ea5908bdb
+https://medium.com/@levinet.nicolai/ldrex-strex-in-action-implementing-mutexes-and-semaphores-38b41b1b35d6
 https://math.stackexchange.com/questions/128778/is-equality-the-same-as-identity
 https://preshing.com/20150402/you-can-do-any-kind-of-atomic-read-modify-write-operation/ 
 https://www.reddit.com/r/rust/comments/11pgs04/trying_to_visualize_how_memory_ordering_and/
@@ -609,3 +793,8 @@ https://www.cs.cmu.edu/~guyb/papers/3503221.3508433.pdf
 https://medium.com/@tylerneely/fear-and-loathing-in-lock-free-programming-7158b1cdd50c 
 https://www.reddit.com/r/cpp/comments/vg4myt/is_lockfree_programming_is_always_better_than/ 
 https://www.youtube.com/watch?v=ZQFzMfHIxng -> CppCon 2017: Fedor Pikus “C++ atomics, from basic to advanced. What do they really do?” 
+http://demsky.eecs.uci.edu/publications/c11modelcheck.pdf -> Paper that Loom for rust was implemented with 
+loom docs
+https://github.com/google/sanitizers/wiki/threadsanitizeralgorithm
+
+
